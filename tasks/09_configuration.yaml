@@ -1,0 +1,112 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: sample-secret
+data:
+  username: c2FtcGxlX3VzZXJuYW1lCg==
+  password: JGVjdXJlUEBzc3cwcmQK
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sample-config
+data:
+  sample.config: |
+    workshop=kubernetes
+    duration=sessions2
+    update_config=version2
+  sample.oneline: "I am one line value 2222"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: configuration-sample
+  labels:
+    app: configuration-sample
+  annotations:
+    build: "4325"
+    builder: john-doe
+spec:
+  containers:
+  - name: nginx
+    image: k8s.gcr.io/nginx-slim:0.8
+    ports:
+    - containerPort: 80
+      name: web
+    resources:
+      limits:
+        cpu: 500m
+        memory: 200Mi
+      requests:
+        cpu: 100m
+        memory: 100Mi
+    env:
+    # plain-text env-var
+    - name: SAMPLE_ENV_VAR
+      value: "Hello from regular environment variable"
+    # downward-api env-var
+    - name: SAMPLE_ENV_NODE_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+    # env-var from secret
+    - name: SAMPLE_ENV_SECRET_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          key: password
+          name: sample-secret
+    # env-var from config (is not reloaded when config changes)
+    - name: SAMPLE_ENV_CONFIG_ONELINE
+      valueFrom:
+        configMapKeyRef:
+          name: sample-config
+          key: sample.oneline
+    volumeMounts:
+      # mount volumes to directories. Changes in volumes are updated in pod
+      - name: podinfo
+        mountPath: /sample_app/podinfo
+      - name: secret-volume
+        mountPath: /sample_app/secret-volume
+      - name: config-volume
+        mountPath: /sample_app/config-volume
+      # mount part of volume to a file. Changes in volume is not updated in pod
+      - name: config-volume
+        mountPath: /sample_app/config_sample.config
+        subPath: sample.config
+        readOnly: true
+  volumes:
+    - name: secret-volume
+      secret:
+        secretName: sample-secret
+    - name: config-volume
+      configMap:
+        name: sample-config
+    - name: podinfo
+      downwardAPI:
+        items:
+          - path: "cpu_limit"
+            resourceFieldRef:
+              containerName: nginx
+              resource: limits.cpu
+              divisor: 1m
+          - path: "cpu_request"
+            resourceFieldRef:
+              containerName: nginx
+              resource: requests.cpu
+              divisor: 1m
+          - path: "memory_limit"
+            resourceFieldRef:
+              containerName: nginx
+              resource: limits.memory
+              divisor: 1Mi
+          - path: "memory_request"
+            resourceFieldRef:
+              containerName: nginx
+              resource: requests.memory
+              divisor: 1Mi
+          - path: "labels"
+            fieldRef:
+              fieldPath: metadata.labels
+          - path: "annotations"
+            fieldRef:
+              fieldPath: metadata.annotations
